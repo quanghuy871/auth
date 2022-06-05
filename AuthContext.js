@@ -1,6 +1,6 @@
 import { createContext, useState, useEffect } from 'react'
 import jwt_decode from "jwt-decode";
-import { useHistory } from 'react-router-dom'
+import {useRouter} from 'next/router';
 
 const AuthContext = createContext()
 
@@ -8,11 +8,11 @@ export default AuthContext;
 
 
 export const AuthProvider = ({children}) => {
-    let [authTokens, setAuthTokens] = useState(()=> localStorage.getItem('authTokens') ? JSON.parse(localStorage.getItem('authTokens')) : null)
-    let [user, setUser] = useState(()=> localStorage.getItem('authTokens') ? jwt_decode(localStorage.getItem('authTokens')) : null)
-    let [loading, setLoading] = useState(true)
+    const [authTokens, setAuthTokens] = useState(()=> localStorage.getItem('authTokens') ? JSON.parse(localStorage.getItem('authTokens')) : null)
+    const [user, setUser] = useState(()=> localStorage.getItem('authTokens') ? jwt_decode(localStorage.getItem('authTokens')) : null)
+    const [loading, setLoading] = useState(true)
 
-    const history = useHistory()
+    const router = useRouter()
 
     let loginUser = async (e )=> {
         e.preventDefault()
