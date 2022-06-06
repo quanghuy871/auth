@@ -1,34 +1,32 @@
-import {createContext, useState, useEffect} from 'react';
-import jwt_decode from 'jwt-decode';
-import {useRouter} from 'next/router';
+import {createContext, useState, useEffect, useRef} from 'react';
+import {getCookie, removeCookies, setCookies} from 'cookies-next';
 
 const AuthContext = createContext();
 
 export default AuthContext;
 
 export const AuthProvider = ({children}) => {
-  const [authTokens, setAuthTokens] = useState(() => localStorage.getItem('authTokens') ? JSON.parse(localStorage.getItem('authTokens')) : null);
-  const [user, setUser] = useState(() => localStorage.getItem('authTokens') ? jwt_decode(localStorage.getItem('authTokens')) : null);
-  const [loading, setLoading] = useState(true);
+  const [authTokens, setAuthTokens] = useState(() => getCookie('token') ? getCookie('token') : null);
+  const firstTime = useRef(true);
 
-  const router = useRouter();
-
-  const loginUser = async (e) => {
-    e.preventDefault();
-    const response = await fetch('http://127.0.0.1:8000/api/token/', {
+  const loginUser = async (stakeAddress, signedData) => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API}/identity-service/wallets/cardano/${stakeAddress}/signin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({'username': e.target.username.value, 'password': e.target.password.value}),
+      body: JSON.stringify({signedData}),
     });
+
     const data = await response.json();
 
     if (response.status === 200) {
-      setAuthTokens(data);
-      setUser(jwt_decode(data.access));
-      localStorage.setItem('authTokens', JSON.stringify(data));
-      router.push('/');
+      setAuthTokens(data.token);
+      setCookies('token', data.token, {
+        expires: new Date(Date.now() + 10 * 60 * 1000),
+        httpOnly: true,
+        secure: false,
+      });
     } else {
       alert('Something went wrong!');
     }
@@ -36,63 +34,62 @@ export const AuthProvider = ({children}) => {
 
   const logoutUser = () => {
     setAuthTokens(null);
-    setUser(null);
-    localStorage.removeItem('authTokens');
-    router.push('/login');
+    removeCookies('token');
   };
 
   const updateToken = async () => {
+    const token = getCookie('token');
 
-    const response = await fetch('http://127.0.0.1:8000/api/token/refresh/', {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API}/identity-service/tokens/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({'refresh': authTokens?.refresh}),
     });
 
     const data = await response.json();
 
     if (response.status === 200) {
-      setAuthTokens(data);
-      setUser(jwt_decode(data.access));
-      localStorage.setItem('authTokens', JSON.stringify(data));
+      setAuthTokens(data.token);
+
+      setCookies('token', data.token, {
+        expires: new Date(Date.now() + 10 * 60 * 1000),
+        httpOnly: true,
+        secure: false,
+      });
+
     } else {
       logoutUser();
-    }
-
-    if (loading) {
-      setLoading(false);
     }
   };
 
   const contextData = {
-    user: user,
     authTokens: authTokens,
-    loginUser: loginUser,
-    logoutUser: logoutUser,
+    connect: loginUser,
+    disconnect: logoutUser,
   };
 
   useEffect(() => {
-
-    if (loading) {
-      updateToken();
+    if (firstTime.current) {
+      firstTime.current = false;
+      return;
     }
 
-    const eightMinutes = 1000 * 60 * 8;
+    const eightMinutes = 8 * 60 * 1000;
 
     const interval = setInterval(() => {
       if (authTokens) {
         updateToken();
       }
     }, eightMinutes);
-    return () => clearInterval(interval);
 
-  }, [authTokens, loading]);
+    return () => clearInterval(interval);
+  }, [authTokens]);
 
   return (
     <AuthContext.Provider value={contextData}>
-      {loading ? null : children}
+      {children}
     </AuthContext.Provider>
   );
 };
